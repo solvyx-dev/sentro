@@ -52,8 +52,8 @@ def render_text_report(
         last_month = report.download_stats.get("last_month")
         if last_month is not None:
             header_lines.append(f"  Downloads last month : {last_month:,}")
-        if report.reputation_discount != 1.0:
-            header_lines.append(f"  Reputation discount  : {report.reputation_discount:.0%}")
+        if report.trust_factor != 1.0:
+            header_lines.append(f"  Trust factor         : {report.trust_factor:.0%}")
 
     panel_style = {
         RiskLevel.SAFE: "green",

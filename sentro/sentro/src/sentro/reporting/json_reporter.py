@@ -43,7 +43,7 @@ def render_json_report(report: ScanReport, thresholds: dict, verbose: bool = Fal
         output["metadata"] = {
             "age_days": report.age_days,
             "download_stats": report.download_stats,
-            "reputation_discount": report.reputation_discount,
+            "trust_factor": report.trust_factor,
         }
         output["scanner_summary"] = report.scanner_summary
 

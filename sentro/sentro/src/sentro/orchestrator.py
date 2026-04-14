@@ -50,13 +50,13 @@ def _compute_package_age_days(pypi_data: dict) -> int | None:
     return (now - oldest).days
 
 
-def _compute_reputation_discount(pypi_data: dict, download_stats: dict) -> float:
-    """Return a score discount for well-established packages.
+def _compute_trust_factor(pypi_data: dict, download_stats: dict) -> float:
+    """Return a trust factor for well-established packages.
 
-    New / low-download packages get no discount (1.0).
-    Established packages get a discount so that minor code-pattern
+    New / low-download packages get no trust reduction (1.0).
+    Established packages get a lower factor so that minor code-pattern
     warnings (e.g. a few eval() calls) do not trigger false-positive WARNING.
-    Real DANGER findings bypass the discount in ScanReport.risk_score.
+    Real DANGER findings bypass the trust factor in ScanReport.risk_score.
     """
     age_days = _compute_package_age_days(pypi_data)
     last_month = download_stats.get("last_month") if download_stats else None
@@ -66,13 +66,13 @@ def _compute_reputation_discount(pypi_data: dict, download_stats: dict) -> float
     if age_days is None:
         return 1.0
 
-    # Very established packages: deep discount
+    # Very established packages: strong trust reduction
     if last_month > 50_000 and age_days > 365:
         return 0.25
-    # Established packages
+    # Established packages: moderate trust reduction
     if last_month > 10_000 and age_days > 90:
         return 0.5
-    # Moderately established
+    # Moderately established: mild trust reduction
     if last_month > 1_000 and age_days > 30:
         return 0.75
 
@@ -174,7 +174,7 @@ class ScanOrchestrator:
         if not pkg_version or pkg_version == "unknown":
             pkg_version = pypi_metadata.get("info", {}).get("version") or version or "unknown"
 
-        reputation_discount = _compute_reputation_discount(pypi_metadata, download_stats)
+        trust_factor = _compute_trust_factor(pypi_metadata, download_stats)
         age_days = _compute_package_age_days(pypi_metadata)
 
         return ScanReport(
@@ -182,7 +182,7 @@ class ScanOrchestrator:
             package_version=pkg_version,
             pypi_verified=pypi_verified,
             findings=findings,
-            reputation_discount=reputation_discount,
+            trust_factor=trust_factor,
             age_days=age_days,
             download_stats=download_stats,
         )

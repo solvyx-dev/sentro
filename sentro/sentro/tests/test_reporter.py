@@ -92,7 +92,7 @@ def test_json_verbose_includes_metadata():
     cfg = load_config()
     report = ScanReport(
         "pkg", "1.0", True, [],
-        reputation_discount=0.5, age_days=100,
+        trust_factor=0.5, age_days=100,
         download_stats={"last_month": 5000},
     )
     output = render_json_report(report, cfg.thresholds, verbose=True)

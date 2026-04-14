@@ -53,17 +53,17 @@ def test_danger_finding_lifts_warning_cap():
     assert report.risk_level({"warning": 30, "danger": 70}) == RiskLevel.DANGER
 
 
-def test_reputation_discount_reduces_warning_score():
+def test_trust_factor_reduces_warning_score():
     findings = [Finding(scanner="x", severity=Severity.WARNING, title="W", detail="d", score=40)]
-    report = ScanReport("pkg", "1.0", True, findings, reputation_discount=0.5)
+    report = ScanReport("pkg", "1.0", True, findings, trust_factor=0.5)
     assert report.risk_score == 20  # 40 * 0.5
 
 
-def test_reputation_discount_ignored_when_danger_present():
+def test_trust_factor_ignored_when_danger_present():
     findings = [
         Finding(scanner="x", severity=Severity.WARNING, title="W", detail="d", score=40),
         Finding(scanner="x", severity=Severity.DANGER, title="D", detail="d", score=10),
     ]
-    report = ScanReport("pkg", "1.0", True, findings, reputation_discount=0.5)
+    report = ScanReport("pkg", "1.0", True, findings, trust_factor=0.5)
     # Discount does NOT apply when a DANGER finding exists
     assert report.risk_score == 50  # 40 + 10
