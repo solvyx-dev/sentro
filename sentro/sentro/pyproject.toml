@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sentro"
+version = "0.1.4"
+description = "Sentro — scan Python packages for malicious code, typosquatting & supply-chain attacks before install. Docs: sentro-docs.onrender.com"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Solvyx.dev", email = "solvyx11@proton.me" }]
+keywords = ["security", "pip", "package-manager", "malware-detection", "supply-chain"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Topic :: Security",
+    "Topic :: Software Development :: Build Tools",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "click>=8.1",
+    "rich>=13.0",
+    "packaging>=24.0",
+]
+
+[project.urls]
+Homepage         = "https://sentro-docs.onrender.com"
+Documentation    = "https://sentro-docs.onrender.com"
+"Source Code"    = "https://github.com/solvyx-dev/sentro"
+"Issue Tracker"  = "https://github.com/solvyx-dev/sentro/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pytest-mock>=3.0",
+    "responses>=0.25",
+]
+
+[project.scripts]
+sentro = "sentro.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sentro"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--tb=short -v"
+markers = [
+    "integration: marks tests that require network access (deselect with '-m not integration')",
+]
+
+[tool.coverage.run]
+source = ["src/sentro"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 70
