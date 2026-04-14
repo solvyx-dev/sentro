@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -25,6 +26,57 @@ class ScannerPipeline:
             if scanner.is_enabled(config):
                 findings.extend(scanner.scan(package))
         return findings
+
+
+def _compute_package_age_days(pypi_data: dict) -> int | None:
+    releases = pypi_data.get("releases", {})
+    upload_times: list[datetime] = []
+    for version_files in releases.values():
+        for file_info in version_files:
+            upload_time_str = file_info.get("upload_time_iso_8601") or file_info.get("upload_time")
+            if upload_time_str:
+                try:
+                    ts = upload_time_str.replace("Z", "+00:00")
+                    dt = datetime.fromisoformat(ts)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    upload_times.append(dt)
+                except ValueError:
+                    pass
+    if not upload_times:
+        return None
+    oldest = min(upload_times)
+    now = datetime.now(tz=timezone.utc)
+    return (now - oldest).days
+
+
+def _compute_reputation_discount(pypi_data: dict, download_stats: dict) -> float:
+    """Return a score discount for well-established packages.
+
+    New / low-download packages get no discount (1.0).
+    Established packages get a discount so that minor code-pattern
+    warnings (e.g. a few eval() calls) do not trigger false-positive WARNING.
+    Real DANGER findings bypass the discount in ScanReport.risk_score.
+    """
+    age_days = _compute_package_age_days(pypi_data)
+    last_month = download_stats.get("last_month") if download_stats else None
+    if last_month is None:
+        last_month = 0
+
+    if age_days is None:
+        return 1.0
+
+    # Very established packages: deep discount
+    if last_month > 50_000 and age_days > 365:
+        return 0.25
+    # Established packages
+    if last_month > 10_000 and age_days > 90:
+        return 0.5
+    # Moderately established
+    if last_month > 1_000 and age_days > 30:
+        return 0.75
+
+    return 1.0
 
 
 class ScanOrchestrator:
@@ -122,11 +174,17 @@ class ScanOrchestrator:
         if not pkg_version or pkg_version == "unknown":
             pkg_version = pypi_metadata.get("info", {}).get("version") or version or "unknown"
 
+        reputation_discount = _compute_reputation_discount(pypi_metadata, download_stats)
+        age_days = _compute_package_age_days(pypi_metadata)
+
         return ScanReport(
             package_name=name,
             package_version=pkg_version,
             pypi_verified=pypi_verified,
             findings=findings,
+            reputation_discount=reputation_discount,
+            age_days=age_days,
+            download_stats=download_stats,
         )
 
     def install_packages(

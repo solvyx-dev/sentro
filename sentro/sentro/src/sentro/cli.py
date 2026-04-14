@@ -81,6 +81,13 @@ def cli() -> None:
     default=None,
     help="Path to a TOML config file.",
 )
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    envvar="SENTRO_VERBOSE",
+    help="Show detailed findings and progress during scanning/installation.",
+)
 @click.pass_context
 def install_cmd(
     ctx: click.Context,
@@ -92,6 +99,7 @@ def install_cmd(
     output_format: Optional[str],
     installer: str,
     config_file: Optional[Path],
+    verbose: bool,
 ) -> None:
     """Install PACKAGES after scanning them for malicious code.
 
@@ -115,6 +123,8 @@ def install_cmd(
         cli_overrides["strict"] = True
     if output_format:
         cli_overrides["output_format"] = output_format
+    if verbose:
+        cli_overrides["verbose"] = True
 
     config = load_config(cli_overrides=cli_overrides, config_file=config_file)
 
@@ -127,10 +137,13 @@ def install_cmd(
         _console.print("[red]Error: no packages specified. Pass package names or use -r requirements.txt[/red]")
         sys.exit(1)
 
+    if config.verbose:
+        _console.print(f"[dim]Packages to process:[/dim] {', '.join(all_packages)}")
+
     # Resolve installer
     if skip_scan:
         resolved_installer = _resolve_installer(installer)
-        rc = _forward_to_installer(resolved_installer, all_packages, ctx.args)
+        rc = _forward_to_installer(resolved_installer, all_packages, ctx.args, verbose=config.verbose)
         sys.exit(rc)
 
     orchestrator = ScanOrchestrator(config=config)
@@ -139,12 +152,18 @@ def install_cmd(
     blocked = False
     scanned_packages: list[str] = []
 
-    for package_spec in all_packages:
+    for idx, package_spec in enumerate(all_packages, 1):
         name, _, version = package_spec.partition("==")
         name = name.strip()
         version = version.strip() or None
 
-        _console.print(f"[dim]Scanning[/dim] [bold]{package_spec}[/bold]...", highlight=False)
+        if config.verbose:
+            _console.print(
+                f"[dim][{idx}/{len(all_packages)}] Scanning[/dim] [bold]{package_spec}[/bold]...",
+                highlight=False,
+            )
+        else:
+            _console.print(f"[dim]Scanning[/dim] [bold]{package_spec}[/bold]...", highlight=False)
 
         try:
             report = orchestrator.scan_package(name, version)
@@ -154,12 +173,14 @@ def install_cmd(
                 sys.exit(2)
             continue
 
-        if config.output_format == "json":
-            from .reporting.json_reporter import render_json_report
-            click.echo(render_json_report(report, config.thresholds))
-        else:
-            from .reporting.text_reporter import render_text_report
-            render_text_report(report, config.thresholds, console=out_console)
+        if config.verbose:
+            _console.print(
+                f"[dim]  → {len(report.findings)} finding(s), risk={report.risk_level(config.thresholds).value} "
+                f"(score {report.risk_score})[/dim]",
+                highlight=False,
+            )
+
+        render_report(report, config, console=out_console)
 
         level = report.risk_level(config.thresholds)
         if level == RiskLevel.DANGER and config.strict:
@@ -175,6 +196,8 @@ def install_cmd(
         sys.exit(1)
 
     if no_install:
+        if config.verbose:
+            _console.print("[dim]--no-install set; skipping installation.[/dim]")
         sys.exit(0)
 
     # Determine which installer to use
@@ -184,7 +207,7 @@ def install_cmd(
     )
 
     packages_to_install = all_packages  # install all, including warned ones
-    rc = _forward_to_installer(resolved_installer, packages_to_install, ctx.args)
+    rc = _forward_to_installer(resolved_installer, packages_to_install, ctx.args, verbose=config.verbose)
     sys.exit(rc)
 
 
@@ -223,8 +246,19 @@ def _forward_to_installer(
     installer: InstallerType,
     packages: list[str],
     extra_args: list[str],
+    verbose: bool = False,
 ) -> int:
     from .installer import build_install_command
     import subprocess
     cmd = build_install_command(installer, packages, extra_args)
-    return subprocess.run(cmd).returncode
+    if verbose:
+        _console.print(f"[dim]Running installer command:[/dim] {' '.join(cmd)}")
+        return subprocess.run(cmd).returncode
+    # Suppress installer output unless it fails; stream stderr for progress feedback
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        if result.stderr:
+            _console.print(result.stderr)
+        if result.stdout:
+            _console.print(result.stdout)
+    return result.returncode

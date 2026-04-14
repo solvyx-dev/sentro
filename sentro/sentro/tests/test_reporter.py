@@ -86,3 +86,29 @@ def test_text_no_findings_message():
     console = Console(file=buf, highlight=False)
     render_text_report(_safe_report(), cfg.thresholds, console=console)
     assert "No issues found" in buf.getvalue()
+
+
+def test_json_verbose_includes_metadata():
+    cfg = load_config()
+    report = ScanReport(
+        "pkg", "1.0", True, [],
+        reputation_discount=0.5, age_days=100,
+        download_stats={"last_month": 5000},
+    )
+    output = render_json_report(report, cfg.thresholds, verbose=True)
+    data = json.loads(output)
+    assert "metadata" in data
+    assert data["metadata"]["age_days"] == 100
+    assert data["scanner_summary"] == {}
+
+
+def test_text_verbose_shows_detail_and_summary():
+    cfg = load_config()
+    report = _danger_report()
+    buf = io.StringIO()
+    # Use a wide console so the Detail column isn't truncated
+    console = Console(file=buf, highlight=False, width=200)
+    render_text_report(report, cfg.thresholds, console=console, verbose=True)
+    text = buf.getvalue()
+    assert "exec() is bad" in text  # detail shown
+    assert "malicious_code" in text  # scanner summary shown

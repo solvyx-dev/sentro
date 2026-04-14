@@ -34,17 +34,19 @@ class SetupHooksScanner(BaseScanner):
             )]
 
         findings: list[Finding] = []
-        findings.extend(self._check_toplevel_dangerous_calls(tree))
-        findings.extend(self._check_cmdclass_override(tree))
+        findings.extend(self._check_toplevel_dangerous_calls(tree, source))
+        findings.extend(self._check_cmdclass_override(tree, source))
         findings.extend(self._check_dynamic_install_requires(tree, source))
         return findings
 
-    def _check_toplevel_dangerous_calls(self, tree: ast.AST) -> list[Finding]:
+    def _check_toplevel_dangerous_calls(self, tree: ast.AST, source: str) -> list[Finding]:
         """Flag dangerous calls that are NOT inside any function/class (run at install time)."""
         findings: list[Finding] = []
         visitor = _ToplevelCallVisitor()
         visitor.visit(tree)
         for node in visitor.dangerous_calls:
+            if _has_nosec(source, node.lineno):
+                continue
             severity = Severity.DANGER
             score = 50
             findings.append(Finding(
@@ -61,7 +63,7 @@ class SetupHooksScanner(BaseScanner):
             ))
         return findings
 
-    def _check_cmdclass_override(self, tree: ast.AST) -> list[Finding]:
+    def _check_cmdclass_override(self, tree: ast.AST, source: str) -> list[Finding]:
         """Flag setup(cmdclass={...}) — legitimate but worth noting."""
         findings: list[Finding] = []
         for node in ast.walk(tree):
@@ -75,6 +77,8 @@ class SetupHooksScanner(BaseScanner):
                 continue
             for kw in node.keywords:
                 if kw.arg == "cmdclass":
+                    if _has_nosec(source, node.lineno):
+                        continue
                     findings.append(Finding(
                         scanner=self.name,
                         severity=Severity.WARNING,
@@ -98,6 +102,9 @@ class SetupHooksScanner(BaseScanner):
             if node.arg != "install_requires":
                 continue
             val = node.value
+            line_no = getattr(val, "lineno", None)
+            if _has_nosec(source, line_no):
+                continue
             # If it's a plain list literal, that's fine
             if isinstance(val, ast.List):
                 continue
@@ -112,7 +119,7 @@ class SetupHooksScanner(BaseScanner):
                 ),
                 score=25,
                 file_path="setup.py",
-                line_number=getattr(val, "lineno", None),
+                line_number=line_no,
             ))
         return findings
 
@@ -156,3 +163,13 @@ def _is_dangerous_call(node: ast.Call) -> bool:
     if isinstance(func, ast.Name) and func.id in {"exec", "eval"}:
         return True
     return False
+
+
+def _has_nosec(source: str, line_number: int | None) -> bool:
+    """Return True if the line contains a # nosec comment."""
+    if line_number is None:
+        return False
+    lines = source.splitlines()
+    if not (1 <= line_number <= len(lines)):
+        return False
+    return "# nosec" in lines[line_number - 1]

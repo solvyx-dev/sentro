@@ -62,6 +62,11 @@ class ObfuscationScanner(BaseScanner):
                 # high-entropy key material, etc. Only keep the decode-chain check.
                 continue
 
+            # Build-tool directories often contain large encoded constants
+            # (certificates, templates, binary stubs) that are not suspicious.
+            if _is_build_tool_path(rel):
+                continue
+
             # Encoded constants: only flag when in suspicious context
             encoded_findings = self._check_long_encoded_constants(tree, rel)
             findings.extend(encoded_findings)
@@ -199,9 +204,14 @@ def _is_test_file(path: Path) -> bool:
     return (
         path.name.startswith("test_")
         or path.name.endswith("_test.py")
-        or "tests" in path.parts
-        or "test" in path.parts
+        or any(part in ("tests", "test") for part in path.parts)
     )
+
+
+def _is_build_tool_path(rel_path: str) -> bool:
+    """True for files inside build-tool directories that legitimately embed binary data."""
+    lower = rel_path.lower()
+    return any(fragment in lower for fragment in ("/distutils/", "/setuptools/", "/build/"))
 
 
 def _is_decode_call(node: ast.expr) -> bool:

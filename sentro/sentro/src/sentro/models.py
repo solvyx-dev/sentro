@@ -56,6 +56,9 @@ class ScanReport:
     package_version: str
     pypi_verified: bool
     findings: list[Finding] = field(default_factory=list)
+    reputation_discount: float = 1.0
+    age_days: Optional[int] = None
+    download_stats: dict = field(default_factory=dict)
 
     @property
     def risk_score(self) -> int:
@@ -64,6 +67,8 @@ class ScanReport:
         # many low-confidence signals never auto-promotes a package to DANGER.
         # A DANGER-severity finding (e.g. a decode-exec chain) lifts the cap.
         has_danger_finding = any(f.severity == Severity.DANGER for f in self.findings)
+        if not has_danger_finding:
+            raw = int(raw * self.reputation_discount)
         return raw if has_danger_finding else min(raw, 65)
 
     def risk_level(self, thresholds: dict) -> RiskLevel:
@@ -73,3 +78,11 @@ class ScanReport:
         if score >= thresholds.get("warning", 30):
             return RiskLevel.WARNING
         return RiskLevel.SAFE
+
+    @property
+    def scanner_summary(self) -> dict[str, dict[str, int]]:
+        summary: dict[str, dict[str, int]] = {}
+        for f in self.findings:
+            summary.setdefault(f.scanner, {"INFO": 0, "WARNING": 0, "DANGER": 0})
+            summary[f.scanner][f.severity.value] += 1
+        return summary

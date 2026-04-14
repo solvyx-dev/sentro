@@ -17,6 +17,6 @@ def render_report(
 ) -> None:
     if config.output_format == "json":
         import click
-        click.echo(render_json_report(report, config.thresholds))
+        click.echo(render_json_report(report, config.thresholds, verbose=config.verbose))
     else:
-        render_text_report(report, config.thresholds, console=console)
+        render_text_report(report, config.thresholds, console=console, verbose=config.verbose)

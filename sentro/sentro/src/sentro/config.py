@@ -27,6 +27,7 @@ class Config:
     pypi_timeout: int = 10
     prefer_wheel: bool = True
     output_format: str = "text"
+    verbose: bool = False
 
 
 def load_config(
@@ -109,6 +110,8 @@ def _apply_env_overrides() -> dict[str, Any]:
         overrides["whitelist_packages"] = [p.strip() for p in val.split(",") if p.strip()]
     if val := os.environ.get("SENTRO_OUTPUT_FORMAT"):
         overrides["output_format"] = val
+    if os.environ.get("SENTRO_VERBOSE", "").lower() in ("1", "true", "yes"):
+        overrides["verbose"] = True
     return overrides
 
 
@@ -130,4 +133,6 @@ def _build_config(data: dict[str, Any]) -> Config:
         cfg.prefer_wheel = bool(data["prefer_wheel"])
     if "output_format" in data:
         cfg.output_format = str(data["output_format"])
+    if "verbose" in data:
+        cfg.verbose = bool(data["verbose"])
     return cfg

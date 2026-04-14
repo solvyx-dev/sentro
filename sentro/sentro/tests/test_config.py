@@ -16,6 +16,7 @@ def test_defaults():
     assert cfg.thresholds["danger"] == 70
     assert cfg.whitelist_packages == []
     assert cfg.output_format == "text"
+    assert cfg.verbose is False
 
 
 def test_cli_overrides_strict():
